@@ -11,7 +11,8 @@ mkdir -p "$test_dir/caddy"
 printf 'services:\n  caddy:\n    volumes:\n      - %s/caddy/pve-root-ca.pem:/etc/caddy/pve-root-ca.pem:ro\n' "$test_dir" \
   >"$test_dir/caddy/docker-compose.yml"
 printf 'example.test { respond "ok" }\n' >"$test_dir/caddy/Caddyfile"
-touch "$test_dir/caddy/.env" "$test_dir/caddy/pve-root-ca.pem"
+printf 'CLOUDFLARE_DNS_TOKEN=test-token\n' >"$test_dir/caddy/.env"
+touch "$test_dir/caddy/pve-root-ca.pem"
 
 docker() {
   printf '%s\n' "$*" >>"$log"
@@ -21,8 +22,9 @@ docker() {
     return 1
   fi
 }
+curl() { return 0; }
 export log
-export -f docker
+export -f curl docker
 
 CADDY_DIR="$test_dir/caddy" "$repo_dir/ops/install-caddy.sh"
 grep -q '^exec caddy caddy validate ' "$log"

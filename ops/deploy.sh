@@ -60,8 +60,16 @@ done
 [[ -z "$starting" ]] || { echo "containers still starting: $starting" >&2; exit 1; }
 
 "${compose[@]}" ps
-curl --fail --silent --show-error --cacert certificates/ca/ca.cer \
-  --resolve openuem.epoh.casa:443:127.0.0.1 https://openuem.epoh.casa/ >/dev/null
+console_ready=0
+for (( attempt = 1; attempt <= 60; attempt++ )); do
+  if curl --fail --silent --show-error \
+    --resolve openuem.epoh.casa:443:127.0.0.1 https://openuem.epoh.casa/ >/dev/null; then
+    console_ready=1
+    break
+  fi
+  sleep 2
+done
+(( console_ready == 1 )) || { echo "console did not serve a publicly trusted certificate" >&2; exit 1; }
 curl --fail --silent --show-error http://192.168.1.106:8000/health >/dev/null
 ss -ltn | grep -E '127\.0\.0\.1:(1323|1324)|192\.168\.1\.106:(4433|8000)'
 "$repo_dir/ops/install-backup-timer.sh"

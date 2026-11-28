@@ -18,9 +18,9 @@ All seven long-running containers must be running. Keep the first backup path an
 ## 2. Prepare administrator access
 
 1. Copy `certificates/ca/ca.cer` and the administrator `.pfx` from `certificates/users/` to the administrator workstation through an approved internal file-transfer channel.
-2. Import `ca.cer` into the workstation's trusted root certificate store.
+2. Import `ca.cer` into the workstation's trusted root certificate store for OpenUEM client certificate validation. The console's server certificate is issued publicly through Cloudflare DNS-01, so a missing private CA does not justify bypassing a browser warning.
 3. Import the `.pfx` into the administrator's personal certificate store. Use its configured password. Do not assume or publish a default password.
-4. Open `https://openuem.epoh.casa` from the LAN and select the imported client certificate when prompted.
+4. Open `https://openuem.epoh.casa:4443` from the LAN and select the imported client certificate when prompted. Use `https://openuem.epoh.casa` for password and MFA login.
 5. Store the `.pfx` in the approved secrets location, then delete the transfer copy.
 
 If certificate login is unavailable, OpenUEM also creates an `openuem` account with a temporary password. Locate the initial-password entry without copying it into tickets or chat:

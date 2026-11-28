@@ -1,5 +1,7 @@
 openuem.epoh.casa {
-	tls /etc/caddy/openuem/console/proxy.cer /etc/caddy/openuem/console/proxy.key
+	tls {
+		dns cloudflare {env.CLOUDFLARE_DNS_TOKEN}
+	}
 	@lan remote_ip 192.168.1.0/24 127.0.0.0/8
 	handle @lan {
 		reverse_proxy https://127.0.0.1:1323 {
@@ -15,7 +17,8 @@ openuem.epoh.casa {
 	respond 403
 }
 openuem.epoh.casa:4443 {
-	tls /etc/caddy/openuem/console/proxy.cer /etc/caddy/openuem/console/proxy.key {
+	tls {
+		dns cloudflare {env.CLOUDFLARE_DNS_TOKEN}
 		client_auth {
 			mode require_and_verify
 			trust_pool file {
