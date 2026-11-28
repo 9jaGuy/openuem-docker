@@ -44,7 +44,8 @@ docker run --rm \
   -v "$destination:/backup" \
   busybox:1.37.0 tar -C /source -czf /backup/jetstream.tar.gz .
 tar -C "$repo_dir" -czf "$destination/config-and-certificates.tar.gz" certificates nats
-(cd "$destination" && sha256sum postgres.dump jetstream.tar.gz config-and-certificates.tar.gz >SHA256SUMS)
+git rev-parse HEAD >"$destination/DEPLOYED_COMMIT"
+(cd "$destination" && sha256sum postgres.dump jetstream.tar.gz config-and-certificates.tar.gz DEPLOYED_COMMIT >SHA256SUMS)
 
 "${compose[@]}" start "${services[@]}"
 services_stopped=0

@@ -7,7 +7,9 @@ firewall_comment='OpenUEM LAN-only'
 cleanup_chain=
 cleanup_table=
 lock_file=${OPENUEM_FIREWALL_LOCK:-/run/lock/openuem-firewall.lock}
+lock_dir=$(dirname "$lock_file")
 
+[[ -d "$lock_dir" ]] || install -d -m 755 "$lock_dir"
 exec 9>"$lock_file"
 flock 9
 

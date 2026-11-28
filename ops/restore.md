@@ -1,10 +1,17 @@
 # Restore OpenUEM on svc1
 
-1. Select the backup and verify its manifest:
+Run the entire procedure in one root shell so the variables, error handling, and backup lock remain active.
+
+1. Enable fail-fast shell behavior, select the backup, wait for any running backup, and hold its lock through deployment:
 
    ```bash
+   set -euo pipefail
    backup_dir=/var/backups/openuem/<selected-backup>
    (cd "$backup_dir" && sha256sum -c SHA256SUMS)
+   exec 9>/run/lock/openuem-backup.lock
+   flock 9
+   deployment_ref=$(tr -d '\r\n' <"$backup_dir/DEPLOYED_COMMIT")
+   test -n "$deployment_ref"
    ```
 
 2. From the repository root, resolve the JetStream volume before stopping its container:
@@ -32,7 +39,24 @@
    tar -xzf "$backup_dir/config-and-certificates.tar.gz" certificates nats
    ```
 
-5. Start only `db`, then restore `postgres.dump` with `pg_restore --clean --if-exists`.
+5. Start only `db`, recreate the target database, and restore with error checking:
+
+   ```bash
+   "${compose[@]}" up -d db
+   "${compose[@]}" exec -T db sh -c "
+     psql -v ON_ERROR_STOP=1 -U \"\$POSTGRES_USER\" -p \"\$POSTGRES_PORT\" -d postgres \\
+       -v dbname=\"\$POSTGRES_DB\" -v dbuser=\"\$POSTGRES_USER\" <<'SQL'
+   SELECT pg_terminate_backend(pid) FROM pg_stat_activity
+     WHERE datname = :'dbname' AND pid <> pg_backend_pid();
+   DROP DATABASE IF EXISTS :\"dbname\";
+   CREATE DATABASE :\"dbname\" OWNER :\"dbuser\";
+   SQL
+   "
+   "${compose[@]}" exec -T db sh -c '
+     pg_restore --exit-on-error -U "$POSTGRES_USER" -p "$POSTGRES_PORT" -d "$POSTGRES_DB"
+   ' <"$backup_dir/postgres.dump"
+   ```
+
 6. Restore JetStream into the resolved volume while `nats-server` remains stopped:
 
    ```bash
@@ -42,6 +66,12 @@
      busybox:1.37.0 sh -c 'find /target -mindepth 1 -maxdepth 1 -exec rm -rf -- {} \; && tar -C /target -xzf /backup/jetstream.tar.gz'
    ```
 
-7. Run `ops/deploy.sh` with the recorded commit and verify console, OCSP, NATS, firewall rules, and one enrolled endpoint.
+7. Deploy the commit recorded with the backup, verify console, OCSP, NATS, firewall rules, and one enrolled endpoint, then release the backup lock:
+
+   ```bash
+   ops/deploy.sh "$deployment_ref"
+   flock -u 9
+   exec 9>&-
+   ```
 
 Test this procedure on a disposable compose project before relying on a backup. Never replace the live database or certificates as a restore test.
