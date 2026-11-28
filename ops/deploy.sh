@@ -62,7 +62,7 @@ done
 "${compose[@]}" ps
 console_ready=0
 for (( attempt = 1; attempt <= 60; attempt++ )); do
-  if curl --fail --silent --show-error \
+  if curl --connect-timeout 5 --max-time 10 --fail --silent --show-error \
     --resolve openuem.epoh.casa:443:127.0.0.1 https://openuem.epoh.casa/ >/dev/null; then
     console_ready=1
     break

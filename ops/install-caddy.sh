@@ -77,7 +77,7 @@ docker compose -f "$compose_file" up -d --force-recreate caddy
 docker exec caddy caddy validate --config /etc/caddy/Caddyfile
 ready=0
 for (( attempt = 1; attempt <= ${CADDY_READY_ATTEMPTS:-60}; attempt++ )); do
-  if curl --fail --silent --show-error --output /dev/null \
+  if curl --connect-timeout 5 --max-time 10 --fail --silent --show-error --output /dev/null \
     "${CADDY_READY_URL:-https://openuem.epoh.casa}"; then
     ready=1
     break

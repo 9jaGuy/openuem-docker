@@ -16,6 +16,9 @@ if grep -q -- '--cacert certificates/ca/ca.cer' "$deploy_script"; then
   exit 1
 fi
 grep -q 'console did not serve a publicly trusted certificate' "$deploy_script"
+install_timeout_count=$(grep -c -- '--connect-timeout 5 --max-time 10' "$repo_dir/ops/install-caddy.sh")
+deploy_timeout_count=$(grep -c -- '--connect-timeout 5 --max-time 10' "$deploy_script")
+(( install_timeout_count + deploy_timeout_count == 2 ))
 
 test_dir=$(mktemp -d)
 cleanup() { rm -rf "$test_dir"; }
