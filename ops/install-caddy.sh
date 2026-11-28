@@ -10,6 +10,8 @@ replacement_started=0
 preserve_backup=0
 
 [[ -f "$compose_file" && -f "$caddyfile" ]] || { echo "Caddy configuration not found" >&2; exit 1; }
+grep -qE '^CLOUDFLARE_DNS_TOKEN=.+' "$caddy_dir/.env" \
+  || { echo "CLOUDFLARE_DNS_TOKEN is missing from $caddy_dir/.env" >&2; exit 1; }
 
 cp -a "$compose_file" "$caddyfile" "$backup_dir/"
 [[ ! -f "$caddy_dir/openuem.caddy" ]] || cp -a "$caddy_dir/openuem.caddy" "$backup_dir/"
@@ -24,7 +26,7 @@ rollback() {
     rm -f "$caddy_dir/openuem.caddy"
   fi
   if (( replacement_started )); then
-    docker compose -f "$compose_file" up -d caddy
+    docker compose -f "$compose_file" up -d --force-recreate caddy
   fi
   preserve_backup=0
 }
@@ -73,5 +75,15 @@ fi
 replacement_started=1
 docker compose -f "$compose_file" up -d --force-recreate caddy
 docker exec caddy caddy validate --config /etc/caddy/Caddyfile
+ready=0
+for (( attempt = 1; attempt <= ${CADDY_READY_ATTEMPTS:-60}; attempt++ )); do
+  if curl --connect-timeout 5 --max-time 10 --fail --silent --show-error --output /dev/null \
+    "${CADDY_READY_URL:-https://openuem.epoh.casa}"; then
+    ready=1
+    break
+  fi
+  sleep "${CADDY_READY_INTERVAL:-2}"
+done
+(( ready == 1 )) || { echo "Caddy did not serve a trusted OpenUEM certificate" >&2; false; }
 replacement_started=0
 trap - ERR

@@ -10,7 +10,7 @@
 - NATS: `openuem-nats.epoh.casa:4433`, bound to `192.168.1.106`, LAN firewall enforced
 - OCSP: `http://openuem-ocsp.epoh.casa:8000`, bound to `192.168.1.106`, LAN firewall enforced
 - DNS: the existing CoreDNS `*.epoh.casa` template resolves all three names to `192.168.1.106`
-- Reverse proxy: existing Caddy in `/opt/docker/caddy`; OpenUEM certificates are mounted read-only
+- Reverse proxy: existing Caddy in `/opt/docker/caddy`; public server certificates use Cloudflare DNS-01, while OpenUEM's private CA remains responsible for client and agent certificates
 - Backups: `/var/backups/openuem`, nightly via `openuem-backup.timer`, 14-day retention
 - Public access: disabled. Revisit DNS, firewall, trusted proxy ranges, certificates, and agent update channels before exposing any port publicly.
 - Endpoint enrollment: follow `ops/onboarding.md`, beginning with one Windows pilot endpoint.
