@@ -73,6 +73,5 @@ fi
 replacement_started=1
 docker compose -f "$compose_file" up -d --force-recreate caddy
 docker exec caddy caddy validate --config /etc/caddy/Caddyfile
-docker exec caddy caddy reload --config /etc/caddy/Caddyfile
 replacement_started=0
 trap - ERR
