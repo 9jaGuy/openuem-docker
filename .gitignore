@@ -1,4 +1,6 @@
 .env
+certificates/
+nats/
 *\.cer
 *\.key
 *\.log

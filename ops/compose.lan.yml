@@ -1,0 +1,25 @@
+services:
+  ocsp-responder:
+    ports: !override
+      - "${LAN_ADDRESS:?LAN_ADDRESS is required}:${OCSP_PORT}:${OCSP_PORT}"
+    networks:
+      openuem:
+        aliases:
+          - "${OCSP_HOST:?OCSP_HOST is required}"
+
+  nats-server:
+    ports: !override
+      - "${LAN_ADDRESS:?LAN_ADDRESS is required}:${NATS_PORT}:${NATS_PORT}"
+    networks:
+      openuem:
+        aliases:
+          - "${NATS_HOST:?NATS_HOST is required}"
+
+  console:
+    ports: !override
+      - "127.0.0.1:${CONSOLE_PORT}:${CONSOLE_PORT}"
+      - "127.0.0.1:${CONSOLE_AUTH_PORT}:${CONSOLE_AUTH_PORT}"
+    networks:
+      openuem:
+        aliases:
+          - "${CONSOLE_HOST:?CONSOLE_HOST is required}"

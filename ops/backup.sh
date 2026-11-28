@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+exec 9>/run/lock/openuem-backup.lock
+flock -n 9 || { echo "another OpenUEM backup is running" >&2; exit 1; }
+
+repo_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+env_file=${OPENUEM_ENV_FILE:-/etc/openuem/openuem.env}
+backup_root=${OPENUEM_BACKUP_DIR:-/var/backups/openuem}
+retention_days=${OPENUEM_BACKUP_RETENTION_DAYS:-14}
+stamp=$(date -u +%Y%m%dT%H%M%SZ)
+backup_root=$(realpath -m "$backup_root")
+[[ "$backup_root" == /var/backups/openuem || "$backup_root" == /var/backups/openuem/* ]] \
+  || { echo "backup directory must stay under /var/backups/openuem" >&2; exit 1; }
+destination=$backup_root/$stamp
+compose=(docker compose --env-file "$env_file" -f compose.yml -f ops/compose.lan.yml)
+
+cd "$repo_dir"
+nats_container=$("${compose[@]}" ps -q nats-server)
+[[ -n "$nats_container" ]] || { echo "NATS container not found" >&2; exit 1; }
+jetstream_volume=$(docker inspect "$nats_container" \
+  --format '{{range .Mounts}}{{if eq .Destination "/var/lib/jetstream/data"}}{{.Name}}{{end}}{{end}}')
+[[ -n "$jetstream_volume" ]] || { echo "JetStream volume not found on $nats_container" >&2; exit 1; }
+docker volume inspect "$jetstream_volume" >/dev/null
+install -d -m 700 "$destination"
+
+# The database variables expand inside the container.
+# shellcheck disable=SC2016
+"${compose[@]}" exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -p "$POSTGRES_PORT" -Fc "$POSTGRES_DB"' \
+  >"$destination/postgres.dump"
+
+services=(console agents-worker cert-manager-worker notification-worker nats-server)
+services_stopped=1
+recover_services() {
+  if (( services_stopped )); then
+    "${compose[@]}" start "${services[@]}"
+  fi
+}
+trap recover_services EXIT
+"${compose[@]}" stop "${services[@]}"
+
+docker run --rm \
+  -v "$jetstream_volume:/source:ro" \
+  -v "$destination:/backup" \
+  busybox:1.37.0 tar -C /source -czf /backup/jetstream.tar.gz .
+tar -C "$repo_dir" -czf "$destination/config-and-certificates.tar.gz" certificates nats
+git rev-parse HEAD >"$destination/DEPLOYED_COMMIT"
+(cd "$destination" && sha256sum postgres.dump jetstream.tar.gz config-and-certificates.tar.gz DEPLOYED_COMMIT >SHA256SUMS)
+
+"${compose[@]}" start "${services[@]}"
+services_stopped=0
+trap - EXIT
+find "$backup_root" -mindepth 1 -maxdepth 1 -type d -mtime "+$retention_days" -exec rm -rf -- {} +
+echo "$destination"
