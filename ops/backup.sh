@@ -15,8 +15,14 @@ backup_root=$(realpath -m "$backup_root")
 destination=$backup_root/$stamp
 compose=(docker compose --env-file "$env_file" -f compose.yml -f ops/compose.lan.yml)
 
-install -d -m 700 "$destination"
 cd "$repo_dir"
+nats_container=$("${compose[@]}" ps -q nats-server)
+[[ -n "$nats_container" ]] || { echo "NATS container not found" >&2; exit 1; }
+jetstream_volume=$(docker inspect "$nats_container" \
+  --format '{{range .Mounts}}{{if eq .Destination "/var/lib/jetstream/data"}}{{.Name}}{{end}}{{end}}')
+[[ -n "$jetstream_volume" ]] || { echo "JetStream volume not found on $nats_container" >&2; exit 1; }
+docker volume inspect "$jetstream_volume" >/dev/null
+install -d -m 700 "$destination"
 
 # The database variables expand inside the container.
 # shellcheck disable=SC2016
@@ -34,7 +40,7 @@ trap recover_services EXIT
 "${compose[@]}" stop "${services[@]}"
 
 docker run --rm \
-  -v openuem_jetstream:/source:ro \
+  -v "$jetstream_volume:/source:ro" \
   -v "$destination:/backup" \
   busybox:1.37.0 tar -C /source -czf /backup/jetstream.tar.gz .
 tar -C "$repo_dir" -czf "$destination/config-and-certificates.tar.gz" certificates nats
