@@ -6,6 +6,8 @@ caddy_dir=${CADDY_DIR:-/opt/docker/caddy}
 compose_file=$caddy_dir/docker-compose.yml
 caddyfile=$caddy_dir/Caddyfile
 backup_dir=$(mktemp -d)
+replacement_started=0
+preserve_backup=0
 
 [[ -f "$compose_file" && -f "$caddyfile" ]] || { echo "Caddy configuration not found" >&2; exit 1; }
 
@@ -13,6 +15,7 @@ cp -a "$compose_file" "$caddyfile" "$backup_dir/"
 [[ ! -f "$caddy_dir/openuem.caddy" ]] || cp -a "$caddy_dir/openuem.caddy" "$backup_dir/"
 
 rollback() {
+  preserve_backup=1
   cp -a "$backup_dir/docker-compose.yml" "$compose_file"
   cp -a "$backup_dir/Caddyfile" "$caddyfile"
   if [[ -f "$backup_dir/openuem.caddy" ]]; then
@@ -20,14 +23,26 @@ rollback() {
   else
     rm -f "$caddy_dir/openuem.caddy"
   fi
+  if (( replacement_started )); then
+    docker compose -f "$compose_file" up -d caddy
+  fi
+  preserve_backup=0
 }
-cleanup() { rm -rf "$backup_dir"; }
+cleanup() {
+  if (( preserve_backup )); then
+    echo "Caddy recovery failed; backup retained at $backup_dir" >&2
+  else
+    rm -rf "$backup_dir"
+  fi
+}
 trap rollback ERR
 trap cleanup EXIT
 
 install -m 644 "$repo_dir/ops/caddy-openuem.caddy" "$caddy_dir/openuem.caddy"
 
 if ! grep -q '/etc/caddy/openuem:ro' "$compose_file"; then
+  grep -q 'pve-root-ca.pem' "$compose_file" \
+    || { echo "pve-root-ca.pem anchor not found in $compose_file" >&2; false; }
   sed -i "/pve-root-ca.pem/a\      - $repo_dir/certificates:/etc/caddy/openuem:ro" "$compose_file"
 fi
 
@@ -36,6 +51,8 @@ if ! grep -q '^import /etc/caddy/openuem.caddy$' "$caddyfile"; then
 fi
 
 if ! grep -q '/etc/caddy/openuem.caddy:ro' "$compose_file"; then
+  grep -q 'pve-root-ca.pem' "$compose_file" \
+    || { echo "pve-root-ca.pem anchor not found in $compose_file" >&2; false; }
   sed -i "/pve-root-ca.pem/a\      - $caddy_dir/openuem.caddy:/etc/caddy/openuem.caddy:ro" "$compose_file"
 fi
 
@@ -53,7 +70,9 @@ if [[ ${CADDY_VALIDATE_ONLY:-0} == 1 ]]; then
   trap - ERR
   exit 0
 fi
+replacement_started=1
 docker compose -f "$compose_file" up -d --force-recreate caddy
 docker exec caddy caddy validate --config /etc/caddy/Caddyfile
 docker exec caddy caddy reload --config /etc/caddy/Caddyfile
+replacement_started=0
 trap - ERR

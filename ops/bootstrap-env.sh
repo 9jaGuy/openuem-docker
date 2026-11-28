@@ -8,7 +8,10 @@ if [[ -e "$env_file" ]]; then
   exit 1
 fi
 
-install -d -m 700 "$(dirname "$env_file")"
+env_parent=$(dirname "$env_file")
+if [[ ! -d "$env_parent" ]]; then
+  install -d -m 700 "$env_parent"
+fi
 db_password=$(openssl rand -hex 32)
 jwt_key=$(openssl rand -hex 32)
 

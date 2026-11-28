@@ -2,6 +2,7 @@
 set -euo pipefail
 
 repo_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+env_file=${OPENUEM_ENV_FILE:-/etc/openuem/openuem.env}
 
 cat >/etc/systemd/system/openuem-backup.service <<EOF
 [Unit]
@@ -11,6 +12,7 @@ After=docker.service
 
 [Service]
 Type=oneshot
+Environment="OPENUEM_ENV_FILE=$env_file"
 ExecStart=$repo_dir/ops/backup.sh
 EOF
 

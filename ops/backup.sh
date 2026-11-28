@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+exec 9>/run/lock/openuem-backup.lock
+flock -n 9 || { echo "another OpenUEM backup is running" >&2; exit 1; }
+
 repo_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 env_file=${OPENUEM_ENV_FILE:-/etc/openuem/openuem.env}
 backup_root=${OPENUEM_BACKUP_DIR:-/var/backups/openuem}
@@ -21,17 +24,24 @@ cd "$repo_dir"
   >"$destination/postgres.dump"
 
 services=(console agents-worker cert-manager-worker notification-worker nats-server)
+services_stopped=1
+recover_services() {
+  if (( services_stopped )); then
+    "${compose[@]}" start "${services[@]}"
+  fi
+}
+trap recover_services EXIT
 "${compose[@]}" stop "${services[@]}"
-trap '"${compose[@]}" up -d "${services[@]}"' EXIT
 
 docker run --rm \
   -v openuem_jetstream:/source:ro \
   -v "$destination:/backup" \
   busybox:1.37.0 tar -C /source -czf /backup/jetstream.tar.gz .
 tar -C "$repo_dir" -czf "$destination/config-and-certificates.tar.gz" certificates nats
-sha256sum "$destination"/* >"$destination/SHA256SUMS"
+(cd "$destination" && sha256sum postgres.dump jetstream.tar.gz config-and-certificates.tar.gz >SHA256SUMS)
 
-"${compose[@]}" up -d "${services[@]}"
+"${compose[@]}" start "${services[@]}"
+services_stopped=0
 trap - EXIT
 find "$backup_root" -mindepth 1 -maxdepth 1 -type d -mtime "+$retention_days" -exec rm -rf -- {} +
 echo "$destination"
